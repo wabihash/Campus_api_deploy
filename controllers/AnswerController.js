@@ -1,37 +1,47 @@
 const db = require('../db/DbConfig');
-
+const { StatusCodes } = require('http-status-codes')
 // POST: Toggle Upvote (Like/Unlike)
 exports.toggleVote = async (req, res) => {
     try {
         const { answer_id } = req.body;
-        const userid = req.user.userid; // Your 'votes' table uses 'userid'
+        const userid = req.user.userid;
+        const username = req.user.username;
 
-        // 1. Check if the vote already exists
         const [existing] = await db.query(
             'SELECT * FROM votes WHERE userid = ? AND answer_id = ?',
             [userid, answer_id]
         );
 
         if (existing.length > 0) {
-            // 2. Remove if exists
             await db.query('DELETE FROM votes WHERE userid = ? AND answer_id = ?', [userid, answer_id]);
             return res.json({ success: true, message: 'Vote removed', voted: false });
         } else {
-            // 3. Add if doesn't exist
             await db.query('INSERT INTO votes (userid, answer_id) VALUES (?, ?)', [userid, answer_id]);
             
-            // Trigger Notification for the LIKE
-            const [answerData] = await db.query('SELECT user_id FROM answers WHERE id = ?', [answer_id]);
-            if (answerData.length > 0 && answerData[0].user_id !== userid) {
-                await db.query(
-                    'INSERT INTO notifications (recipient_id, sender_id, message) VALUES (?, ?, ?)',
-                    [answerData[0].user_id, userid, `${req.user.username} liked your answer!`]
+            // Get answer owner and the question_id associated with that answer
+            const [answerInfo] = await db.query(
+                'SELECT user_id, question_id FROM answers WHERE id = ?', 
+                [answer_id]
+            );
+
+            if (answerInfo.length > 0 && answerInfo[0].user_id !== userid) {
+                 await db.query(
+                    // Now we include question_id so the DB is happy!
+                    'INSERT INTO notifications (recipient_id, sender_id, question_id, message) VALUES (?, ?, ?, ?)',
+                    [
+                        answerInfo[0].user_id, 
+                        userid, 
+                        answerInfo[0].question_id, 
+                        `${username} liked your answer!`
+                    ]
                 );
             }
+
             return res.json({ success: true, message: 'Vote added', voted: true });
         }
     } catch (err) {
-        console.error(err);
+        console.error("Toggle Vote Error:", err);
+        // Using StatusCodes correctly here
         res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ success: false, message: 'Voting failed' });
     }
 };
