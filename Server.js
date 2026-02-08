@@ -22,6 +22,6 @@ app.use('/api/questions',QuestionRoute)
 app.use('/api/campus',campusRoute)
 app.use('/api/departments',departmentRoute)
 
-app.listen(PORT, () => {
-  console.log(`Server listening on http://localhost:${PORT}`);
-}); 
+app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server is running on port ${PORT}`);
+});
