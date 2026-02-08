@@ -22,11 +22,11 @@ const campusRoute = require('./routes/CampusRoute');
 const departmentRoute = require('./routes/DepartmentRoute')
 const answerRoute = require('./routes/AnswerRoute') 
 //Routes
-app.use('/api/answers',answerRoute)
-app.use('/api/users',UserRoute)
-app.use('/api/questions',QuestionRoute)
-app.use('/api/campus',campusRoute)
-app.use('/api/departments',departmentRoute)
+app.use('/answers',answerRoute)
+app.use('/users',UserRoute)
+app.use('/questions',QuestionRoute)
+app.use('/campus',campusRoute)
+app.use('/departments',departmentRoute)
 
 app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server is running on port ${PORT}`);
