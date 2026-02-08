@@ -1,4 +1,4 @@
-const db = require('../db/dbconfig');
+const db = require('../db/DbConfig');
 
 // POST: Toggle Upvote (Like/Unlike)
 exports.toggleVote = async (req, res) => {
