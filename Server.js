@@ -4,10 +4,16 @@ const cors = require('cors');
 require('dotenv').config();
 const app = express();
 //Middleware
-app.use(cors({ 
-    origin: 'http://localhost:5173',
-    credentials: true
-}));
+const corsOptions = {
+  origin: [
+    'https://campus-forum.netlify.app', // Your live Netlify URL
+    'http://localhost:5173'             // Keep this so you can still test locally
+  ],
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  credentials: true,
+  optionsSuccessStatus: 200 
+};
+app.use(cors(corsOptions));
 app.use(express.json());
 
 const UserRoute = require('./routes/UserRoute');
