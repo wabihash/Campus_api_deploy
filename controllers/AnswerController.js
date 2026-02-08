@@ -4,7 +4,7 @@ const db = require('../db/DbConfig');
 exports.toggleVote = async (req, res) => {
     try {
         const { answer_id } = req.body;
-        const userid = req.user.userid; // Consistent with your schema
+        const userid = req.user.userid; // Your 'votes' table uses 'userid'
 
         // 1. Check if the vote already exists
         const [existing] = await db.query(
@@ -13,17 +13,26 @@ exports.toggleVote = async (req, res) => {
         );
 
         if (existing.length > 0) {
-            // 2. If it exists, remove it (Unlike)
+            // 2. Remove if exists
             await db.query('DELETE FROM votes WHERE userid = ? AND answer_id = ?', [userid, answer_id]);
             return res.json({ success: true, message: 'Vote removed', voted: false });
         } else {
-            // 3. If it doesn't, add it (Like)
+            // 3. Add if doesn't exist
             await db.query('INSERT INTO votes (userid, answer_id) VALUES (?, ?)', [userid, answer_id]);
+            
+            // Trigger Notification for the LIKE
+            const [answerData] = await db.query('SELECT user_id FROM answers WHERE id = ?', [answer_id]);
+            if (answerData.length > 0 && answerData[0].user_id !== userid) {
+                await db.query(
+                    'INSERT INTO notifications (recipient_id, sender_id, message) VALUES (?, ?, ?)',
+                    [answerData[0].user_id, userid, `${req.user.username} liked your answer!`]
+                );
+            }
             return res.json({ success: true, message: 'Vote added', voted: true });
         }
     } catch (err) {
         console.error(err);
-        res.status(500).json({ success: false, message: 'Voting failed' });
+        res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ success: false, message: 'Voting failed' });
     }
 };
 
@@ -31,7 +40,7 @@ exports.toggleVote = async (req, res) => {
 exports.getAnswersByQuestion = async (req, res) => {
     try {
         const question_id = req.params.id;
-        const userid = req.user ? req.user.userid : null; // Check if user is logged in
+        const userid = req.user ? req.user.userid : null;
 
         const [answers] = await db.query(`
             SELECT 
@@ -52,74 +61,50 @@ exports.getAnswersByQuestion = async (req, res) => {
         res.json({ success: true, answers });
     } catch (err) {
         console.error(err);
-        res.status(500).json({ success: false, message: 'Server error' });
+        res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ success: false });
     }
 };
-
 // ... existing imports ...
 exports.addAnswer = async (req, res) => {
     try {
         const { question_id, content } = req.body;
         const userid = req.user.userid; 
-        const username = req.user.username; // Ensure your authMiddleware provides this
+        const username = req.user.username;
 
         if (!question_id || !content) {
-            return res.status(400).json({ success: false, message: 'Required fields missing' });
+            return res.status(StatusCodes.BAD_REQUEST).json({ message: 'Fields missing' });
         }
 
         const [result] = await db.query(
-            'INSERT INTO answers (question_id, user_id, content, created_at) VALUES (?, ?, ?, NOW())',
+            'INSERT INTO answers (question_id, user_id, content) VALUES (?, ?, ?)',
             [question_id, userid, content]
         );
 
-        // --- NEW NOTIFICATION LOGIC ---
-        // 1. Find the person who asked the question
-        const [questionOwner] = await db.query(
-            'SELECT userid FROM questions WHERE id = ?', 
-            [question_id]
-        );
-
-        if (questionOwner.length > 0) {
-           const recipientId = questionOwner[0]?.userid; 
-
-if (recipientId && recipientId !== userid) {
-                await db.query(
-                    'INSERT INTO notifications (recipient_id, sender_id, question_id, message) VALUES (?, ?, ?, ?)',
-                    [recipientId, userid, question_id, `${username} answered your question!`]
-                );
-            }
+        // Notify Question Owner
+        const [owner] = await db.query('SELECT userid FROM questions WHERE id = ?', [question_id]);
+        if (owner.length > 0 && owner[0].userid !== userid) {
+            await db.query(
+                'INSERT INTO notifications (recipient_id, sender_id, question_id, message) VALUES (?, ?, ?, ?)',
+                [owner[0].userid, userid, question_id, `${username} answered your question!`]
+            );
         }
-        // ------------------------------
 
         res.json({ success: true, message: 'Answer posted', answer_id: result.insertId });
     } catch (err) {
         console.error(err);
-        res.status(500).json({ success: false, message: 'Server error' });
+        res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ success: false });
     }
 };
-// DELETE: Remove an answer
+
+// DELETE: Remove Answer
 exports.deleteAnswer = async (req, res) => {
     try {
-        const { id } = req.params; // Answer ID
-        const userid = req.user.userid; 
-
-        // Delete only if the answer belongs to the logged-in user
-        const [result] = await db.query(
-            'DELETE FROM answers WHERE id = ? AND user_id = ?',
-            [id, userid]
-        );
-
-        if (result.affectedRows === 0) {
-            return res.status(403).json({ 
-                success: false, 
-                message: "Unauthorized or answer not found" 
-            });
-        }
-
-        res.json({ success: true, message: 'Answer deleted' });
+        const { id } = req.params;
+        const [result] = await db.query('DELETE FROM answers WHERE id = ? AND user_id = ?', [id, req.user.userid]);
+        if (result.affectedRows === 0) return res.status(StatusCodes.FORBIDDEN).json({ message: "Denied" });
+        res.json({ success: true, message: 'Deleted' });
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ success: false, message: 'Delete failed' });
+        res.status(500).json({ success: false });
     }
 };
 // PUT: Update an answer

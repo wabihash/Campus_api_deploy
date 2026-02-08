@@ -8,28 +8,34 @@ const {
   getQuestionsByDepartment,
   getMyQuestions,
   deleteQuestion,
-  adminDeleteQuestion, // Imported the new admin controller
+  adminDeleteQuestion,
   editQuestion
 } = require('../controllers/QuestionController');
-// Import the new notification controllers
+
 const { getNotifications, markAsRead, clearAllNotifications } = require('../controllers/NotificationController');
 const authMiddleware = require('../middlewares/AuthMiddleware');
-// --- NOTIFICATION ROUTES ---
+
+// --- 1. NOTIFICATION ROUTES (Must be at the top) ---
 router.get('/notifications', authMiddleware, getNotifications);
 router.put('/notifications/read', authMiddleware, markAsRead);
 router.put('/notifications/:id/read', authMiddleware, markAsRead);
 router.delete('/notifications/clear', authMiddleware, clearAllNotifications);
-// --- ADMIN ROUTES ---
-// This matches the URL we used in your AdminDashboard.jsx
+
+// --- 2. ADMIN ROUTES ---
 router.delete('/admin/delete/:id', authMiddleware, adminDeleteQuestion);
 
-// --- YOUR EXISTING ROUTES ---
+// --- 3. SPECIFIC USER ROUTES ---
 router.get('/my-questions', authMiddleware, getMyQuestions);
-router.delete('/:id', authMiddleware, deleteQuestion);
 router.post('/add', authMiddleware, addQuestion);
-router.put('/:id', authMiddleware, editQuestion);
+
+// --- 4. GENERAL DATA ROUTES ---
 router.get('/', getAllQuestions);
-router.get('/:id', getQuestionById);
 router.get('/campus/:campus_id', getQuestionsByCampus);
 router.get('/department/:department_id', getQuestionsByDepartment);
+
+// --- 5. ID PARAMETER ROUTES (Must be at the bottom) ---
+router.get('/:id', getQuestionById);
+router.delete('/:id', authMiddleware, deleteQuestion);
+router.put('/:id', authMiddleware, editQuestion);
+
 module.exports = router;
