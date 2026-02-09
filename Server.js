@@ -2,38 +2,24 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
-const PORT = process.env.PORT || 5400;
+// FIX: Use the port provided by the cloud environment
+const PORT = process.env.PORT || 5400; 
+
 const app = express();
 
-const allowedOrigins = [
-  'https://campus-forum.netlify.app',
-  'http://localhost:5173'
-];
-
 const corsOptions = {
-  origin: (origin, callback) => {
-    if (
-      !origin ||
-      allowedOrigins.includes(origin) ||
-      origin.includes('.vercel.app')
-    ) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS']
+  origin: [
+    'https://campus-forum.netlify.app',
+    'https://campus-forum.vercel.app',
+    'http://localhost:5173'
+  ],
+  methods: ['GET','HEAD','PUT','PATCH','POST','DELETE'],
+  credentials: true
 };
 
-// 🚨 MUST be FIRST
+
 app.use(cors(corsOptions));
-
-// 🚨 MUST explicitly allow preflight
-app.options('*', cors(corsOptions));
-
 app.use(express.json());
-
 
 // Routes
 const UserRoute = require('./routes/UserRoute');
