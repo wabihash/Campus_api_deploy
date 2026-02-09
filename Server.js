@@ -1,44 +1,62 @@
+// server.js
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
-// FIX: Use the port provided by the cloud environment
-const PORT = process.env.PORT || 5400; 
+// Use cloud-provided port or fallback
+const PORT = process.env.PORT || 5400;
 
 const app = express();
 
+// Allowed origins
+const allowedOrigins = [
+  'https://campus-forum.netlify.app',
+  'http://localhost:5173'
+];
+
+// CORS options (works for Netlify, Vercel previews, localhost)
 const corsOptions = {
-  origin: [
-    'https://campus-forum.netlify.app',
-    'https://campus-forum.vercel.app',
-    'https://campus-hub-omega-ashen.vercel.app',
-    'http://localhost:5173'
-  ],
+  origin: (origin, callback) => {
+    // allow requests with no origin (like Postman)
+    if (
+      !origin ||
+      allowedOrigins.includes(origin) ||
+      origin.includes('.vercel.app')
+    ) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET','HEAD','PUT','PATCH','POST','DELETE','OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   credentials: true
 };
 
-
+// Apply CORS middleware BEFORE routes
 app.use(cors(corsOptions));
-// Ensure preflight requests are handled with the same CORS options
+
+// Handle preflight requests globally
 app.options('*', cors(corsOptions));
+
+// Built-in middleware to parse JSON
 app.use(express.json());
 
-// Routes
+// ===== ROUTES =====
 const UserRoute = require('./routes/UserRoute');
 const QuestionRoute = require('./routes/QuestionRoute');
-const campusRoute = require('./routes/CampusRoute'); 
-const departmentRoute = require('./routes/DepartmentRoute');
-const answerRoute = require('./routes/AnswerRoute');
+const CampusRoute = require('./routes/CampusRoute'); 
+const DepartmentRoute = require('./routes/DepartmentRoute');
+const AnswerRoute = require('./routes/AnswerRoute');
 
-app.use('/answers', answerRoute);
+app.use('/answers', AnswerRoute);
 app.use('/users', UserRoute);
 app.use('/questions', QuestionRoute);
-app.use('/campus', campusRoute);
-app.use('/departments', departmentRoute);
+app.use('/campus', CampusRoute);
+app.use('/departments', DepartmentRoute);
 
-// FIX: Bind to 0.0.0.0 so Render can route traffic to it
-app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server is running on port ${PORT}`);
+// ===== START SERVER =====
+// Bind to 0.0.0.0 for cloud hosting (Render)
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server is running on port ${PORT}`);
 });
