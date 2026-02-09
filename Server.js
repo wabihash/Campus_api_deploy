@@ -3,43 +3,43 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
-// Use cloud-provided port or fallback
 const PORT = process.env.PORT || 5400;
-
 const app = express();
 
-// Allowed origins
+// 1. Updated Allowed Origins
 const allowedOrigins = [
   'https://campus-forum.netlify.app',
+  'https://campus-hub-omega-ashen.vercel.app', // Added your Vercel production URL explicitly
   'http://localhost:5173'
 ];
 
-// CORS options (works for Netlify, Vercel previews, localhost)
 const corsOptions = {
   origin: (origin, callback) => {
-    // allow requests with no origin (like Postman)
-    if (
-      !origin ||
-      allowedOrigins.includes(origin) ||
-      origin.includes('.vercel.app')
-    ) {
+    // Allow requests with no origin (like mobile apps or Postman)
+    if (!origin) return callback(null, true);
+
+    const isAllowed = allowedOrigins.includes(origin) || origin.endsWith('.vercel.app');
+
+    if (isAllowed) {
       callback(null, true);
     } else {
+      // Log this so you can see the blocked URL in Render's logs
+      console.log("CORS blocked origin:", origin);
       callback(new Error('Not allowed by CORS'));
     }
   },
-  methods: ['GET','HEAD','PUT','PATCH','POST','DELETE','OPTIONS'],
+  methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
-  credentials: true
+  credentials: true,
+  optionsSuccessStatus: 200 // Responds to preflight with 200 instead of 204
 };
 
-// Apply CORS middleware BEFORE routes
+// 2. Apply CORS middleware FIRST
 app.use(cors(corsOptions));
 
-// Handle preflight requests globally
-app.options('*', cors(corsOptions));
+// 3. Removed the app.options('*') line that caused the crash. 
+// The cors() middleware above already handles OPTIONS requests.
 
-// Built-in middleware to parse JSON
 app.use(express.json());
 
 // ===== ROUTES =====
@@ -56,7 +56,6 @@ app.use('/campus', CampusRoute);
 app.use('/departments', DepartmentRoute);
 
 // ===== START SERVER =====
-// Bind to 0.0.0.0 for cloud hosting (Render)
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on port ${PORT}`);
 });
