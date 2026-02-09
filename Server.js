@@ -11,14 +11,18 @@ const corsOptions = {
   origin: [
     'https://campus-forum.netlify.app',
     'https://campus-forum.vercel.app',
+    'https://campus-hub-omega-ashen.vercel.app',
     'http://localhost:5173'
   ],
-  methods: ['GET','HEAD','PUT','PATCH','POST','DELETE'],
+  methods: ['GET','HEAD','PUT','PATCH','POST','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   credentials: true
 };
 
 
 app.use(cors(corsOptions));
+// Ensure preflight requests are handled with the same CORS options
+app.options('*', cors(corsOptions));
 app.use(express.json());
 
 // Routes
