@@ -2,9 +2,7 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 
-// FIX: Use the port provided by the cloud environment
-const PORT = process.env.PORT || 5400; 
-
+const PORT = process.env.PORT || 5400;
 const app = express();
 
 const allowedOrigins = [
@@ -15,21 +13,27 @@ const allowedOrigins = [
 const corsOptions = {
   origin: (origin, callback) => {
     if (
-      !origin || // mobile apps, Postman
+      !origin ||
       allowedOrigins.includes(origin) ||
-      origin.endsWith('.vercel.app')
+      origin.includes('.vercel.app')
     ) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
     }
   },
-  credentials: true
+  credentials: true,
+  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS']
 };
 
-
+// 🚨 MUST be FIRST
 app.use(cors(corsOptions));
+
+// 🚨 MUST explicitly allow preflight
+app.options('*', cors(corsOptions));
+
 app.use(express.json());
+
 
 // Routes
 const UserRoute = require('./routes/UserRoute');
