@@ -9,7 +9,7 @@ const app = express();
 // 1. Updated Allowed Origins
 const allowedOrigins = [
   'https://campus-forum.netlify.app',
-  'https://campus-hub-omega-ashen.vercel.app', // Added your Vercel production URL explicitly
+  'https://campus-hub-9gi7.vercel.app', // Added your Vercel production URL explicitly
   'http://localhost:5173'
 ];
 
