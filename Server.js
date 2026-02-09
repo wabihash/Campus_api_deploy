@@ -7,15 +7,26 @@ const PORT = process.env.PORT || 5400;
 
 const app = express();
 
+const allowedOrigins = [
+  'https://campus-forum.netlify.app',
+  'http://localhost:5173'
+];
+
 const corsOptions = {
-  origin: [
-    'https://campus-forum.netlify.app',
-    'http://localhost:5173'
-  ],
-  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
-  credentials: true,
-  optionsSuccessStatus: 200 
+  origin: (origin, callback) => {
+    if (
+      !origin || // mobile apps, Postman
+      allowedOrigins.includes(origin) ||
+      origin.endsWith('.vercel.app')
+    ) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
 };
+
 
 app.use(cors(corsOptions));
 app.use(express.json());
