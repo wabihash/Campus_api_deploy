@@ -3,21 +3,21 @@ const { StatusCodes } = require('http-status-codes');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const nodemailer = require('nodemailer');
+const nodemailer = require("nodemailer");
 
-// --- FIXED TRANSPORTER FOR RENDER ---
 const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 25,
-    secure: false, 
-    auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-    },
-    tls: {
-        rejectUnauthorized: false
-    }
+  host: "smtp.gmail.com",
+  port: 465,              // use 465 for SSL, or 587 for TLS
+  secure: true,           // true for 465, false for 587
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+  tls: {
+    rejectUnauthorized: false, // optional, helps with self-signed certs
+  },
 });
+;
 // --- REGISTER ---
 async function register(req, res) {
     const { username, firstname, lastname, email, password } = req.body;
