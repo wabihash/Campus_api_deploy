@@ -8,15 +8,15 @@ const nodemailer = require('nodemailer');
 // --- FIXED TRANSPORTER FOR RENDER ---
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, // Must be false for port 587
+    port: 25,
+    secure: false, 
     auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
     },
-    // This forces the connection to stay open longer
-    connectionTimeout: 20000, 
-    socketTimeout: 20000,
+    tls: {
+        rejectUnauthorized: false
+    }
 });
 // --- REGISTER ---
 async function register(req, res) {
