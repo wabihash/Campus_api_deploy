@@ -183,13 +183,29 @@ async function forgotPassword(req, res) {
                        <p>If you didn't request this, you can safely ignore this message.</p>`
             };
 
-            await transporter.sendMail(mailOptions);
+            const info = await transporter.sendMail(mailOptions);
+            // if using nodemailer test account, log preview URL
+            if (nodemailer.getTestMessageUrl) {
+                const preview = nodemailer.getTestMessageUrl(info);
+                if (preview) console.log('Preview URL:', preview);
+            }
         } catch (mailErr) {
             console.error('Failed to send reset email:', mailErr);
             // continue — we don't want to leak info to the client
         }
 
-        return res.status(StatusCodes.OK).json({ success: true, message: 'If that email exists, a reset link has been sent' });
+        // Optionally return the reset URL for local/dev testing
+        const resp = { success: true, message: 'If that email exists, a reset link has been sent' };
+        if (process.env.SHOW_RESET_LINK === 'true') {
+            resp.resetUrl = resetUrl;
+        }
+
+        // Also log the URL (dev-only) so it's easy to fetch from logs
+        if (process.env.SHOW_RESET_LINK === 'true' || process.env.NODE_ENV !== 'production') {
+            console.log('RESET URL (dev):', resetUrl);
+        }
+
+        return res.status(StatusCodes.OK).json(resp);
     } catch (err) {
         console.error(err);
         return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ success: false, message: 'Server error' });
