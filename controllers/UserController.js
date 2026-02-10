@@ -5,127 +5,87 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 
+// --- Helper: Email Transporter ---
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+    },
+});
+
 async function register(req, res) {
     const { username, firstname, lastname, email, password } = req.body;
-
     if (!username || !firstname || !lastname || !email || !password) {
-        return res.status(StatusCodes.BAD_REQUEST).json({
-            success: false,
-            message: 'All fields are required'
-        });
+        return res.status(StatusCodes.BAD_REQUEST).json({ success: false, message: 'All fields are required' });
     }
     try {
-        const [users] = await db.query(
-            "SELECT userid FROM users WHERE username = ? OR email = ?",
-            [username, email]
-        );
+        const [users] = await db.query("SELECT userid FROM users WHERE username = ? OR email = ?", [username, email]);
         if (users.length > 0) {
-            return res.status(StatusCodes.BAD_REQUEST).json({
-                success: false,
-                message: 'Username or email already registered'
-            });
+            return res.status(StatusCodes.BAD_REQUEST).json({ success: false, message: 'Username or email already registered' });
         }
         if (password.length < 8) {
-            return res.status(StatusCodes.BAD_REQUEST).json({
-                success: false,
-                message: 'Password must be at least 8 characters'
-            });
+            return res.status(StatusCodes.BAD_REQUEST).json({ success: false, message: 'Password must be at least 8 characters' });
         }
-
         const hashedPassword = await bcrypt.hash(password, 10);
-
-        // NOTE: role will default to 'user' because of our SQL schema
         await db.query(
-            `INSERT INTO users 
-            (username, firstname, lastname, email, password_hash)
-            VALUES (?, ?, ?, ?, ?)`,
+            `INSERT INTO users (username, firstname, lastname, email, password_hash) VALUES (?, ?, ?, ?, ?)`,
             [username, firstname, lastname, email, hashedPassword]
         );
-
-        res.status(StatusCodes.CREATED).json({
-            success: true,
-            message: 'User registered successfully'
-        });
-
+        res.status(StatusCodes.CREATED).json({ success: true, message: 'User registered successfully' });
     } catch (error) {
         console.error(error);
-        res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-            success: false,
-            message: 'Server error'
-        });
+        res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ success: false, message: 'Server error' });
     }
 }
 
 async function login(req, res) {
     const { identifier, password } = req.body;
-
     if (!identifier || !password) {
-        return res.status(StatusCodes.BAD_REQUEST).json({
-            success: false,
-            message: 'Username/email and password are required'
-        });
+        return res.status(StatusCodes.BAD_REQUEST).json({ success: false, message: 'Username/email and password are required' });
     }
     try {
         const isEmail = identifier.includes("@");
-        
-        // UPDATED: Now selecting "role" from the database
         const query = isEmail
             ? "SELECT userid, username, password_hash, role FROM users WHERE email = ?"
             : "SELECT userid, username, password_hash, role FROM users WHERE username = ?";
 
         const [users] = await db.query(query, [identifier]);
-        
         if (users.length === 0) {
-            return res.status(StatusCodes.UNAUTHORIZED).json({
-                success: false,
-                message: 'Invalid username or password'
-            });
+            return res.status(StatusCodes.UNAUTHORIZED).json({ success: false, message: 'Invalid credentials' });
         }
 
         const user = users[0];
         const isMatch = await bcrypt.compare(password, user.password_hash);
+        if (!isMatch) return res.status(StatusCodes.UNAUTHORIZED).json({ success: false, message: 'Invalid credentials' });
 
-        if (!isMatch) {
-            return res.status(StatusCodes.UNAUTHORIZED).json({
-                success: false,
-                message: 'Invalid password'
-            });
-        }
-
-        // Generate JWT token - UPDATED: Added "role" to the token payload
-        const secret = process.env.JWT_SECRET;
         const token = jwt.sign(
-            { userid: user.userid, username: user.username, role: user.role }, 
-            secret, 
-            { expiresIn: '1d' } // Increased to 1 day for better UX
+            { userid: user.userid, username: user.username, role: user.role },
+            process.env.JWT_SECRET,
+            { expiresIn: '1d' }
         );
 
         return res.status(StatusCodes.OK).json({
             success: true,
-            message: 'User Login successful',
+            message: 'Login successful',
             userid: user.userid,
             username: user.username,
-            role: user.role, // Sending role to frontend
+            role: user.role,
             token: token
         });
     } catch (err) {
         console.error(err);
-        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-            success: false,
-            message: 'Server error'
-        });
+        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ success: false, message: 'Server error' });
     }
 }
 
 async function checkUser(req, res) {
-    // UPDATED: Now returns role as well
     const { username, userid, role } = req.user;
-    res.status(StatusCodes.OK).json({ msg: "valid user", username, userid, role });
+    res.status(StatusCodes.OK).json({ username, userid, role });
 }
 
-module.exports = { register, login, checkUser };
+// ------------------ Password Reset ------------------
 
-// ------------------ Password reset handlers ------------------
 async function forgotPassword(req, res) {
     const { email } = req.body;
     if (!email) return res.status(StatusCodes.BAD_REQUEST).json({ success: false, message: 'Email required' });
@@ -133,81 +93,39 @@ async function forgotPassword(req, res) {
     try {
         const [users] = await db.query('SELECT userid, username FROM users WHERE email = ?', [email]);
         if (users.length === 0) {
-            // respond success to avoid user enumeration
             return res.status(StatusCodes.OK).json({ success: true, message: 'If that email exists, a reset link has been sent' });
         }
 
         const user = users[0];
-
-        // ensure password_resets table exists
-        await db.query(`CREATE TABLE IF NOT EXISTS password_resets (
-            id INT PRIMARY KEY AUTO_INCREMENT,
-            userid INT NOT NULL,
-            token_hash VARCHAR(128) NOT NULL,
-            expires_at DATETIME NOT NULL,
-            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            INDEX (userid),
-            INDEX (token_hash)
-        )`);
-
         const token = crypto.randomBytes(32).toString('hex');
         const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
         const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
-        // remove old tokens for this user
+        // Note: Make sure the table 'password_resets' exists in your TiDB database!
         await db.query('DELETE FROM password_resets WHERE userid = ?', [user.userid]);
         await db.query('INSERT INTO password_resets (userid, token_hash, expires_at) VALUES (?, ?, ?)', [user.userid, tokenHash, expiresAt]);
 
-        const clientUrl = process.env.CLIENT_URL || 'http://localhost:5173';
-        const resetUrl = `${clientUrl}/reset-password/${token}`;
+        const resetUrl = `${process.env.CLIENT_URL}/reset-password/${token}`;
 
-        // send email (best-effort)
-        try {
-            const transporter = nodemailer.createTransport({
-                host: process.env.SMTP_HOST,
-                port: process.env.SMTP_PORT || 587,
-                secure: process.env.SMTP_SECURE === 'true',
-                auth: {
-                    user: process.env.SMTP_USER,
-                    pass: process.env.SMTP_PASS
-                }
-            });
+        const mailOptions = {
+            from: `"Campus Hub" <${process.env.EMAIL_FROM}>`,
+            to: email,
+            subject: 'Reset your Campus Hub password',
+            html: `<h3>Hello ${user.username},</h3>
+                   <p>Click the link below to reset your password. It expires in 1 hour.</p>
+                   <a href="${resetUrl}" style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Reset Password</a>
+                   <p>If the button doesn't work, copy this: ${resetUrl}</p>`
+        };
 
-            const mailOptions = {
-                from: process.env.EMAIL_FROM || process.env.SMTP_USER,
-                to: email,
-                subject: 'Reset your Campus Hub password',
-                html: `<p>Hi ${user.username},</p>
-                       <p>We received a request to reset your password. Click the link below to choose a new password. This link expires in one hour.</p>
-                       <p><a href="${resetUrl}">Reset your password</a></p>
-                       <p>If you didn't request this, you can safely ignore this message.</p>`
-            };
+        await transporter.sendMail(mailOptions);
 
-            const info = await transporter.sendMail(mailOptions);
-            // if using nodemailer test account, log preview URL
-            if (nodemailer.getTestMessageUrl) {
-                const preview = nodemailer.getTestMessageUrl(info);
-                if (preview) console.log('Preview URL:', preview);
-            }
-        } catch (mailErr) {
-            console.error('Failed to send reset email:', mailErr);
-            // continue — we don't want to leak info to the client
-        }
+        return res.status(StatusCodes.OK).json({ 
+            success: true, 
+            message: 'If that email exists, a reset link has been sent' 
+        });
 
-        // Optionally return the reset URL for local/dev testing
-        const resp = { success: true, message: 'If that email exists, a reset link has been sent' };
-        if (process.env.SHOW_RESET_LINK === 'true') {
-            resp.resetUrl = resetUrl;
-        }
-
-        // Also log the URL (dev-only) so it's easy to fetch from logs
-        if (process.env.SHOW_RESET_LINK === 'true' || process.env.NODE_ENV !== 'production') {
-            console.log('RESET URL (dev):', resetUrl);
-        }
-
-        return res.status(StatusCodes.OK).json(resp);
     } catch (err) {
-        console.error(err);
+        console.error('Forgot password error:', err);
         return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ success: false, message: 'Server error' });
     }
 }
@@ -220,25 +138,24 @@ async function resetPassword(req, res) {
     try {
         const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
         const [rows] = await db.query('SELECT userid, expires_at FROM password_resets WHERE token_hash = ?', [tokenHash]);
+        
         if (rows.length === 0) return res.status(StatusCodes.BAD_REQUEST).json({ success: false, message: 'Invalid or expired token' });
 
         const record = rows[0];
-        const expires = new Date(record.expires_at);
-        if (expires < new Date()) {
+        if (new Date(record.expires_at) < new Date()) {
             await db.query('DELETE FROM password_resets WHERE userid = ?', [record.userid]);
-            return res.status(StatusCodes.BAD_REQUEST).json({ success: false, message: 'Invalid or expired token' });
+            return res.status(StatusCodes.BAD_REQUEST).json({ success: false, message: 'Token expired' });
         }
 
         const hashedPassword = await bcrypt.hash(password, 10);
         await db.query('UPDATE users SET password_hash = ? WHERE userid = ?', [hashedPassword, record.userid]);
         await db.query('DELETE FROM password_resets WHERE userid = ?', [record.userid]);
 
-        return res.status(StatusCodes.OK).json({ success: true, message: 'Password has been reset' });
+        return res.status(StatusCodes.OK).json({ success: true, message: 'Password reset successful' });
     } catch (err) {
         console.error(err);
         return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ success: false, message: 'Server error' });
     }
 }
 
-// export additions
 module.exports = { register, login, checkUser, forgotPassword, resetPassword };
