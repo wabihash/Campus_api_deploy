@@ -8,18 +8,16 @@ const nodemailer = require('nodemailer');
 // --- FIXED TRANSPORTER FOR RENDER ---
 const transporter = nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 465,
-    secure: true, // Required for port 465
+    port: 587,
+    secure: false, // Must be false for port 587
     auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
     },
-    // These timeouts prevent the ETIMEDOUT error
-    connectionTimeout: 10000, 
-    greetingTimeout: 10000,
-    socketTimeout: 10000,
+    // This forces the connection to stay open longer
+    connectionTimeout: 20000, 
+    socketTimeout: 20000,
 });
-
 // --- REGISTER ---
 async function register(req, res) {
     const { username, firstname, lastname, email, password } = req.body;
