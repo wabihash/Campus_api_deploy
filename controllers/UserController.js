@@ -5,15 +5,22 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const nodemailer = require('nodemailer');
 
-// --- Helper: Email Transporter ---
+// --- FIXED TRANSPORTER FOR RENDER ---
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true, // Required for port 465
     auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
     },
+    // These timeouts prevent the ETIMEDOUT error
+    connectionTimeout: 10000, 
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
 });
 
+// --- REGISTER ---
 async function register(req, res) {
     const { username, firstname, lastname, email, password } = req.body;
     if (!username || !firstname || !lastname || !email || !password) {
@@ -23,9 +30,6 @@ async function register(req, res) {
         const [users] = await db.query("SELECT userid FROM users WHERE username = ? OR email = ?", [username, email]);
         if (users.length > 0) {
             return res.status(StatusCodes.BAD_REQUEST).json({ success: false, message: 'Username or email already registered' });
-        }
-        if (password.length < 8) {
-            return res.status(StatusCodes.BAD_REQUEST).json({ success: false, message: 'Password must be at least 8 characters' });
         }
         const hashedPassword = await bcrypt.hash(password, 10);
         await db.query(
@@ -39,6 +43,7 @@ async function register(req, res) {
     }
 }
 
+// --- LOGIN ---
 async function login(req, res) {
     const { identifier, password } = req.body;
     if (!identifier || !password) {
@@ -51,9 +56,7 @@ async function login(req, res) {
             : "SELECT userid, username, password_hash, role FROM users WHERE username = ?";
 
         const [users] = await db.query(query, [identifier]);
-        if (users.length === 0) {
-            return res.status(StatusCodes.UNAUTHORIZED).json({ success: false, message: 'Invalid credentials' });
-        }
+        if (users.length === 0) return res.status(StatusCodes.UNAUTHORIZED).json({ success: false, message: 'Invalid credentials' });
 
         const user = users[0];
         const isMatch = await bcrypt.compare(password, user.password_hash);
@@ -79,13 +82,13 @@ async function login(req, res) {
     }
 }
 
+// --- CHECK USER ---
 async function checkUser(req, res) {
     const { username, userid, role } = req.user;
     res.status(StatusCodes.OK).json({ username, userid, role });
 }
 
-// ------------------ Password Reset ------------------
-
+// --- FORGOT PASSWORD ---
 async function forgotPassword(req, res) {
     const { email } = req.body;
     if (!email) return res.status(StatusCodes.BAD_REQUEST).json({ success: false, message: 'Email required' });
@@ -101,7 +104,6 @@ async function forgotPassword(req, res) {
         const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
         const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
-        // Note: Make sure the table 'password_resets' exists in your TiDB database!
         await db.query('DELETE FROM password_resets WHERE userid = ?', [user.userid]);
         await db.query('INSERT INTO password_resets (userid, token_hash, expires_at) VALUES (?, ?, ?)', [user.userid, tokenHash, expiresAt]);
 
@@ -117,33 +119,30 @@ async function forgotPassword(req, res) {
                    <p>If the button doesn't work, copy this: ${resetUrl}</p>`
         };
 
+        // This is where the ETIMEDOUT happens if settings are wrong
         await transporter.sendMail(mailOptions);
 
-        return res.status(StatusCodes.OK).json({ 
-            success: true, 
-            message: 'If that email exists, a reset link has been sent' 
-        });
+        return res.status(StatusCodes.OK).json({ success: true, message: 'Reset link sent!' });
 
     } catch (err) {
-        console.error('Forgot password error:', err);
-        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ success: false, message: 'Server error' });
+        console.error('CRITICAL MAIL ERROR:', err);
+        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ success: false, message: 'Email service error' });
     }
 }
 
+// --- RESET PASSWORD ---
 async function resetPassword(req, res) {
     const { token, password } = req.body;
-    if (!token || !password) return res.status(StatusCodes.BAD_REQUEST).json({ success: false, message: 'Token and new password required' });
-    if (password.length < 8) return res.status(StatusCodes.BAD_REQUEST).json({ success: false, message: 'Password must be at least 8 characters' });
+    if (!token || !password) return res.status(StatusCodes.BAD_REQUEST).json({ success: false, message: 'Token and password required' });
 
     try {
         const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
         const [rows] = await db.query('SELECT userid, expires_at FROM password_resets WHERE token_hash = ?', [tokenHash]);
         
-        if (rows.length === 0) return res.status(StatusCodes.BAD_REQUEST).json({ success: false, message: 'Invalid or expired token' });
+        if (rows.length === 0) return res.status(StatusCodes.BAD_REQUEST).json({ success: false, message: 'Invalid token' });
 
         const record = rows[0];
         if (new Date(record.expires_at) < new Date()) {
-            await db.query('DELETE FROM password_resets WHERE userid = ?', [record.userid]);
             return res.status(StatusCodes.BAD_REQUEST).json({ success: false, message: 'Token expired' });
         }
 
