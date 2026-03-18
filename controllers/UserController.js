@@ -46,7 +46,6 @@ function sendEmailSafe({ to, subject, html, text }) {
                 html,
                 text,
             })
-            .then(() => console.log(`SMTP email sent: "${subject}" -> ${to}`))
             .catch(e => console.log("SMTP email failed, but moving on...", e?.message || e));
     } catch (mailErr) {
         console.log("Mail skipped");
